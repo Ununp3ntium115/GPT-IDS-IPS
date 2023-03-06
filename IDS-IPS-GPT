@@ -1,0 +1,56 @@
+import socket
+import struct
+import time
+import os
+
+# Define the network interface to capture packets on
+# For example, to capture packets on the first ethernet interface
+# on Linux, set the interface to 'eth0'
+interface = 'eth0'
+
+# Open the network interface for capturing packets
+raw_socket = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
+raw_socket.bind((interface, 0))
+
+# Set the timeout for the raw socket to 10 milliseconds
+raw_socket.settimeout(10)
+
+# Loop forever, capturing and analyzing packets
+while True:
+    try:
+        # Capture a packet from the network interface
+        packet = raw_socket.recvfrom(65535)
+
+        # Extract the Ethernet header from the packet
+        eth_header = packet[0][0:14]
+
+        # Extract the IP header from the packet
+        ip_header = packet[0][14:34]
+
+        # Extract the TCP header from the packet
+        tcp_header = packet[0][34:54]
+
+        # Extract the data payload from the packet
+        payload = packet[0][54:]
+
+        # Parse the IP header to get the source and destination IP addresses
+        ip_src = socket.inet_ntoa(ip_header[12:16])
+        ip_dst = socket.inet_ntoa(ip_header[16:20])
+
+        # Parse the TCP header to get the source and destination ports
+        tcp_src = struct.unpack('!H', tcp_header[0:2])[0]
+        tcp_dst = struct.unpack('!H', tcp_header[2:4])[0]
+
+        # Analyze the packet for any suspicious activity
+        # For example, to detect SSH brute-force attacks, check for multiple
+        # failed login attempts from the same IP address
+        if tcp_dst == 22 and 'Failed password' in payload:
+            print(f'[ALERT] Possible SSH brute-force attack from {ip_src}')
+
+        # Log the packet to a file for later analysis
+        log_file = open('/var/log/ids.log', 'a')
+        log_file.write(f'{time.time()}: {ip_src} -> {ip_dst}:{tcp_dst}\n')
+        log_file.close()
+
+    except socket.timeout:
+        pass
